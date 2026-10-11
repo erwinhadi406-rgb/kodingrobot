@@ -112,6 +112,12 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
 #scene .hopper.hop{animation:hop .38s ease-in-out}
 #scene .hopper.hop2{animation:hop2 .38s ease-in-out}
 #scene .hopper.bump{animation:bump .4s ease}
+#scene .hopper.fall{transform-box:fill-box;transform-origin:50% 60%;animation:fall 1.05s cubic-bezier(.4,0,.9,.6) .2s both}
+#scene .hopper.spawn{transform-box:fill-box;transform-origin:50% 100%;animation:spawn .7s cubic-bezier(.2,1.3,.4,1) both}
+@keyframes spawn{0%{transform:translateY(-70px) scale(.3);opacity:0}60%{opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}
+@keyframes fall{0%{transform:translateY(0) rotate(0) scale(1);opacity:1}
+ 18%{transform:translateY(-16px) rotate(-8deg) scale(1.08,.94);opacity:1}
+ 100%{transform:translateY(300px) rotate(200deg) scale(.55);opacity:0}}
 @keyframes hop{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
 @keyframes hop2{0%,100%{transform:translateY(0)}50%{transform:translateY(-30px)}}
 @keyframes bump{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}50%{transform:translateX(6px)}75%{transform:translateX(-3px)}}
@@ -171,7 +177,7 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
 .ask-row{display:flex;gap:10px;flex-wrap:wrap}
 .ask-row .btn{flex:1 1 130px;min-height:50px}
 /* layar mulai */
-.splash{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:16px;background:rgba(124,196,255,.55);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.splash{position:fixed;inset:0;z-index:20;display:grid;place-items:center;overflow:auto;padding:16px;background:rgba(124,196,255,.55);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .sp-card{width:min(100%,440px);background:var(--dock);border-radius:28px;padding:24px 24px 20px;box-shadow:0 14px 34px rgba(10,40,80,.35);text-align:center;display:grid;gap:10px;justify-items:center}
 .sp-art{width:120px;height:140px;animation:spbob 1.6s ease-in-out infinite alternate}
 @keyframes spbob{from{transform:translateY(0)}to{transform:translateY(-8px)}}
@@ -217,6 +223,9 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
   .tray li:not(.empty){width:52px;min-height:46px}
   .say{top:2px;font-size:.82rem;padding:5px 12px}
   .splash .sp-card,.ask .ask-card,.modal .card{zoom:.8}
+  .sp-art{width:64px;height:76px}
+  .sp-card{gap:6px;padding:14px 18px}
+  .sp-go{min-height:46px}
 }
 @media (prefers-reduced-motion: reduce){
   #scene .hopper,.gem .bob,.glow,.cloud,#scene,#sky .cliff,.slime,.sp-art,.ask-card{animation:none!important}
@@ -724,6 +733,8 @@ var sfx={
   wait:function(){tone(300,.07,'sine',.05);},
   jump:function(){tone(380,.2,'sine',.07,0,820);},
   star:function(){tone(880,.12,'sine',.07);tone(1320,.18,'sine',.06,.09);},
+  fall:function(){duckMusic(.4,1.2);tone(900,.9,'sine',.07,.15,110);tone(700,.7,'triangle',.04,.2,90);},
+  spawn:function(){tone(520,.12,'sine',.06,0,780);tone(780,.14,'sine',.05,.1,1040);},
   bump:function(){duckMusic(.45,.5);tone(150,.25,'sawtooth',.06,0,70);},
   win:function(){duckMusic(.25,2.2);[523,659,784,1046].forEach(function(f,i){tone(f,.22,'triangle',.07,i*.11);});},
   tap:function(){tone(700,.04,'square',.025);}
@@ -997,8 +1008,14 @@ function snapTo(f){
   applyPos();
 }
 var tweenTok=0;
+function fallTarget(f){
+  var dd=f.act==='B'?(f.d+2)%4:f.d,n=f.act==='J'?2:1;
+  return{u:f.c+DIRS[dd][1]*n-P.cc,v:f.r+DIRS[dd][0]*n-P.rc};
+}
+function isFall(f){return !!(f.bump&&/jatuh/i.test(f.bump));}
 function tweenTo(f,dur){
   var tg=targetsOf(f),tok=++tweenTok,t0=performance.now(),st=tg.map(function(x){return{u:x.m.u,v:x.m.v};});
+  if(dur>0&&isFall(f)){var ft=fallTarget(f);tg[0].u=ft.u;tg[0].v=ft.v;}
   if(dur<=0){tg.forEach(function(x){x.m.u=x.u;x.m.v=x.v;});applyPos();return;}
   function s(now){
     if(tok!==tweenTok)return;
@@ -1029,13 +1046,13 @@ function showFrame(f,animate){
   orient(f);gemsOf(f);
   var lis=$('#tray').querySelectorAll('li:not(.empty)'),i;
   for(i=0;i<lis.length;i++)lis[i].classList.toggle('on',i===f.idx);
-  var hop=$('#hop');hop.classList.remove('hop','hop2','bump');void hop.getBoundingClientRect();
+  var hop=$('#hop');hop.classList.remove('hop','hop2','bump','fall','spawn');void hop.getBoundingClientRect();
   if(animate){
-    if(f.bump)hop.classList.add('bump');else if(f.act==='J')hop.classList.add('hop2');else if(f.act==='F'||f.act==='B')hop.classList.add('hop');
+    if(f.bump)hop.classList.add(isFall(f)?'fall':'bump');else if(f.act==='J')hop.classList.add('hop2');else if(f.act==='F'||f.act==='B')hop.classList.add('hop');
   }
 }
 function playSfx(prev,f){
-  if(f.bump){sfx.bump();setTimeout(function(){kidSay('oops');},200);return;}
+  if(f.bump){if(isFall(f)){sfx.fall();setTimeout(function(){kidSay('oops');},900);}else{sfx.bump();setTimeout(function(){kidSay('oops');},200);}return;}
   if(f.got.length>prev.got.length)return sfx.star();
   if(f.act==='J')sfx.jump();else if(f.act==='L'||f.act==='R'||f.act==='U')sfx.turn();else if(f.act==='T')sfx.wait();else sfx.move();
 }
@@ -1138,9 +1155,10 @@ function advance(){
   var prev=frames[fi];fi++;showFrame(frames[fi],true);playSfx(prev,frames[fi]);
   return true;
 }
+function finDelay(){return res&&/jatuh/i.test(res.msg||'')?1400:450;}
 function tick(){
   advance();
-  if(fi>=frames.length-1){stopTimer();setRunUI();setTimeout(finish,450);}
+  if(fi>=frames.length-1){stopTimer();setRunUI();setTimeout(finish,finDelay());}
 }
 function startTimer(){timer=setInterval(tick,Math.round(620/speed));}
 function run(){
@@ -1156,7 +1174,7 @@ function step(){
   if(frames&&fi>=frames.length-1)resetRun();
   if(!ensureSim())return;
   say('');advance();
-  if(fi>=frames.length-1)setTimeout(finish,450);
+  if(fi>=frames.length-1)setTimeout(finish,finDelay());
 }
 function pause(){
   if(!timer&&!paused)return;
@@ -1170,7 +1188,18 @@ function finish(){
     if(!save.done[cur]||save.done[cur]<s)save.done[cur]=s;
     persist();renderMission();sfx.win();showWin(s);
     setTimeout(function(){kidSay(cur===LEVELS.length-1?'all':s===3?'win3':'win');},450);
-  }else say(res.msg,'bad');
+  }else{
+    say(res.msg,'bad');
+    if(res.outcome==='bump'&&/jatuh/i.test(res.msg||'')){
+      var tok=res;
+      setTimeout(function(){
+        if(res!==tok||timer)return;
+        resetRun();
+        var h=$('#hop');h.classList.remove('spawn');void h.getBoundingClientRect();h.classList.add('spawn');
+        sfx.spawn&&sfx.spawn();
+      },900);
+    }
+  }
 }
 
 /* popup Ulangi */
